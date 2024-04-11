@@ -1,10 +1,11 @@
-import { parsePython } from '@/helpers/parseEditorPythonCell';
+import {parsePython, ParsePythonReturnType} from '@/helpers/parseEditorPythonCell';
 import { CodeCellLanguage } from '@/quadratic-core/types';
 import monaco, { editor } from 'monaco-editor';
 import { useEffect, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import { editorInteractionStateAtom } from '../../../atoms/editorInteractionStateAtom';
 import { pixiApp } from '../../../gridGL/pixiApp/PixiApp';
+import { Coordinate } from "../../../gridGL/types/size";
 import { ParseFormulaReturnType, Span } from '../../../helpers/formulaNotation';
 import { StringId, getKey } from '../../../helpers/getKey';
 import { parse_formula } from '../../../quadratic-core/quadratic_core';
@@ -32,6 +33,26 @@ function extractCellsFromParseFormula(
       throw new Error('Unhandled cell_ref type in extractCellsFromParseFormula');
     }
   });
+}
+
+function makeReferencedPositionsAbsolute(parsed: ParsePythonReturnType, resolutionBase: Coordinate) {
+  for (const cellRef of parsed.cell_refs) {
+    if (!cellRef.cell_ref_pos_is_relative) {
+      continue
+    }
+
+    if (cellRef.cell_ref.type === "Cell") {
+      cellRef.cell_ref.pos.x.coord += resolutionBase.x;
+      cellRef.cell_ref.pos.y.coord += resolutionBase.y;
+    }
+
+    if (cellRef.cell_ref.type === "CellRange") {
+      cellRef.cell_ref.start.x.coord += resolutionBase.x;
+      cellRef.cell_ref.start.y.coord += resolutionBase.y;
+      cellRef.cell_ref.end.x.coord += resolutionBase.x;
+      cellRef.cell_ref.end.y.coord += resolutionBase.y;
+    }
+  }
 }
 
 export type CellRefId = StringId | `${StringId}:${StringId}`;
@@ -86,7 +107,8 @@ export const useEditorCellHighlights = (
       let parsed;
 
       if (language === 'Python') {
-        parsed = parsePython(modelValue) as ParseFormulaReturnType;
+        parsed = parsePython(modelValue);
+        makeReferencedPositionsAbsolute(parsed, editorInteractionState.selectedCell);
       }
 
       if (language === 'Formula') {
